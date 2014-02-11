@@ -4,6 +4,9 @@ import urllib, urllib2, unicodedata, cookielib, re
 from bs4 import BeautifulSoup
 
 minprice = 4.99
+LOGIN = False
+email = "email"
+password = "password"
 
 authors = {
   "mclellan":"B009IA053A",
@@ -102,6 +105,9 @@ class EbookSpecials:
     cj = cookielib.CookieJar()
     self.opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
     self.opener.addheaders = [('User-Agent', 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:26.0) Gecko/20100101 Firefox/26.0'),]
+
+    if LOGIN:
+      self.amazonLogin()
 
     """Go through whole list of authors and call <getPage()> for each author and result page"""
     message = unicode('')
@@ -202,10 +208,6 @@ class EbookSpecials:
   
   def amazonLogin(self):
     """Log in to you amazon account"""
-    ################################### Setup #####################################
-    cj = cookielib.CookieJar()
-    self.opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
-    self.opener.addheaders = [('User-Agent', 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:26.0) Gecko/20100101 Firefox/26.0'),]
   
     ########################## Get and set form params ############################
     url_login_page = "https://www.amazon.com/ap/signin/182-9380882-4173709?_encoding=UTF8&_encoding=UTF8&openid.assoc_handle=usflex&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.mode=checkid_setup&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0&openid.ns.pape=http%3A%2F%2Fspecs.openid.net%2Fextensions%2Fpape%2F1.0&openid.pape.max_auth_age=0&openid.return_to=https%3A%2F%2Fwww.amazon.com%2Fgp%2Fyourstore%2Fhome%3Fie%3DUTF8%26ref_%3Dgno_signin"
