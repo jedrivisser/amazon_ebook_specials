@@ -1,11 +1,6 @@
 #!/usr/bin/python
 
-"""Amazon e-book Specials checker
-This program checks for books by <authors> (using their amazon ID) which cost less than <price> and filters out all books in <ignore>
-You can also overwrite <price> for a specific book by adding its name and value to the <overwrite> dictionary
-"""
-
-import urllib2, unicodedata
+import urllib, urllib2, unicodedata, cookielib, re
 from bs4 import BeautifulSoup
 
 minprice = 4.99
@@ -29,7 +24,8 @@ authors = {
   "sullivan":"B002BOJ41O",
   "goodkind":"B000APZOQA",
   "adams":"B000AQ2A84",
-  "tolkien":"B000ARC6KA"
+  "tolkien":"B000ARC6KA",
+  "dahl":"B000AQ0WGQ",
   #"london":"B000AP1TJQ"
   }
 
@@ -44,7 +40,8 @@ ignore = [
 
 own = [
   "B004J4WN0I", "B00AUSCOIS", "B008TSC2E2",  #Hearne
-  "B005FFW46S", "B00BW2MOKO", "B006O41HTO", "B000W965QM", "B000UVBT7M", "B000UVBT3G", "B000W912Q0", "B000W916WK", # Pratchett
+  "B005FFW46S", "B00BW2MOKO", "B006O41HTO", "B000W965QM", "B000UVBT7M", \
+  "B000UVBT3G", "B000W912Q0", "B000W916WK", "B0054LJGWS", # Pratchett
   "B003V4B4GQ", "B003P2WO5E", "B00ARHAAZ6", #Sanderson
   "B002VBV1R2", "B00329UWL8", "B00BMKDTNC", #Jordan
   "B00433TO4I", "B004DNW65W", #Goodkind
@@ -67,6 +64,8 @@ overwrite = {
   "B0099D4KEG":2.99, "B004H1TQBW":8, #Sanderson
   "B00C8S9UXA":2.99, "B00I1LS0SE":0.99, #Hearne
   "B00413QA9C":4.50, #Card
+  "B000W94DZC":3.79, "B000W9393Y":3.79, "B001AW2OYC":3.79, "B000UVBT18":3.79, "B000W913S2":3.79, "B000TU16QI":3.79, #Pratchett
+  "B00CB1CNVU":3.88, "B00B1FG9M6":4.27, "B0096HG2AK":4.88, "B0093WVND4":4.88, "B0093X805W":4.88, #Dahl
   }
 
 # Book url = "http://www.amazon.com/gp/product/" + bookID
@@ -84,98 +83,161 @@ books = {
   "B00HL0MA3W":40, # The Malazan Empire by Steven Erikson
   }
 
-def main(minprice, authors = {}, ignore = [], own = [], overwrite = {}, books = {}):
-  """Go through whole list of authors and call <getPage()> for each author and result page"""
-  message = unicode('')
-  for authorID in authors.values():
-      result = checkPage(authorID, minprice, ignore, own, overwrite) #run once to get first page and a page count
-      if result:
-        m, pages, more = result
-        message += unicode(m)
-        for page in range(2,pages+1): #run for the other pages if there is more than one
-            if more == True:
-                m, more = checkPage(authorID, minprice, ignore, own, overwrite, page)
-                message += unicode(m)
-      else:
-        print "Could not connect"
-        return   
+class EbookSpecials:
+  """Amazon e-book Specials checker
+
+  This program checks for books by <authors> (using their amazon ID) which cost less than <price> and filters out all books in <ignore> 
+  You can also overwrite <price> for a specific book by adding its name and value to the <overwrite> dictionary
+  
+  """
+
+  def __init__(self, minprice, authors = {}, ignore = [], own = [], overwrite = {}, books = {}):
+    self.minprice = minprice
+    self.authors = authors
+    self.ignore = ignore
+    self.own = own
+    self.overwrite = overwrite
+    self.books = books
+
+    cj = cookielib.CookieJar()
+    self.opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
+    self.opener.addheaders = [('User-Agent', 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:26.0) Gecko/20100101 Firefox/26.0'),]
+
+    """Go through whole list of authors and call <getPage()> for each author and result page"""
+    message = unicode('')
+    for authorID in self.authors.values():
+        result = self.checkPage(authorID) #run once to get first page and a page count
+        if result:
+          m, pages, more = result
+          message += unicode(m)
+          for page in range(2,pages+1): #run for the other pages if there is more than one
+              if more == True:
+                  m, more = self.checkPage(authorID, page)
+                  message += unicode(m)
+        else:
+          print "Could not connect"
+          return   
+        
+    for bookID in self.books.keys():
+      minBookPrice = self.minprice if self.books[bookID] < 0 else self.books[bookID]
+      m = self.checkBook(bookID,minBookPrice)
+      message += unicode(m)
+  
+    message = unicodedata.normalize('NFKD', message).encode('ascii','ignore')  
+    if message == '':
+        message = "No books cheaper than $" + str(self.minprice)
+    message = "======e-books cheaper than $"  + str(self.minprice) + "======\n" + message
+    print message
+  
+  def checkPage(self, authorID, page=1):
+      """
+      Checks one page for specials and returns the found specials,
+      the number of pages, and if you should look for more specials.
       
-  for bookID in books.keys():
-    minBookPrice = minprice if books[bookID] < 0 else books[bookID]
-    m = checkBook(bookID,minBookPrice)
-    message += unicode(m)
-
-  message = unicodedata.normalize('NFKD', message).encode('ascii','ignore')  
-  if message == '':
-      message = "No books cheaper than $" + str(minprice)
-  message = "======e-books cheaper than $"  + str(minprice) + "======\n" + message
-  print message
-
-def checkPage(authorID, minprice, ignore, own, overwrite, page=1):
-    """
-    Checks one page for specials and returns the found specials,
-    the number of pages and if you should look for more specials.
-    """
-    
-    url = "http://www.amazon.com/r/e/" + authorID + "/?rh=n%3A283155%2Cp_n_feature_browse-bin%3A618073011&sort=price&page=" + str(page);
-                
-    try:
-        data = str(urllib2.urlopen(url).read())
-    except:
-        return None 
-
-    soup = BeautifulSoup(data, "html5lib")
-    
-    books = soup("div", "list results twister")[0].select('div.result.product.celwidget')
-    message = ""
-    more = True
-
-    for book in books:
-        bookID = book['name']
-        name = book('h3')[0]('a')[0].string
-	link = book('h3')[0]('a')[0]['href']
-	if not link.startswith("http://www.amazon.com"):
-        	link = "http://www.amazon.com" + link
-        price = book('div','tp')[0]('table')[0]('tr')[1]('td')[2]('a')[0].string
-        dprice = float(price[1:])
-        if dprice < minprice:
-          if bookID in ignore or bookID in own:
-            continue
-          elif bookID in overwrite:
-            if dprice < overwrite[bookID]:
+      """
+      
+      url = "http://www.amazon.com/r/e/" + authorID + "/?rh=n%3A283155%2Cp_n_feature_browse-bin%3A618073011&sort=price&page=" + str(page);
+                  
+      try:
+          data = str(self.opener.open(url).read())
+      except:
+          return None 
+  
+      soup = BeautifulSoup(data, "html.parser")
+      #soup = BeautifulSoup(data)
+      
+      books = soup("div", "list results twister")[0].select('div.result.product.celwidget')
+      message = ""
+      more = True
+      for book in books:
+          bookID = book['name']
+          name = book('h3')[0]('a')[0].string
+          link = book('h3')[0]('a')[0]['href']
+          if not link.startswith("http://www.amazon.com"):
+          	link = "http://www.amazon.com" + link
+          price = book('div','tp')[0]('table')[0]('tr')[1]('td')[2]('a')[0].string
+          dprice = float(price[1:])
+          if dprice < self.minprice:
+            if bookID in self.ignore or bookID in self.own:
+              continue
+            elif bookID in self.overwrite:
+              if dprice < self.overwrite[bookID]:
+                message += name + " " + price + " - " + link + "\n"
+            else:
               message += name + " " + price + " - " + link + "\n"
           else:
-            message += name + " " + price + " - " + link + "\n"
-        else:
-            more = False
-    
-    if page==1:
-        if soup('span', "pagnDisabled"):
-            pages = int(soup('span', "pagnDisabled")[0].string)
-        elif soup('span', "pagnLink"):
-            pages = int(soup('span', "pagnLink")[-1].string)
-        else:
-            pages = 1
-        return message, pages, more
-    else:
-        return message, more
-    
-def checkBook(bookID,min_price):
-  """Check price of specific book"""
-  url = "http://www.amazon.com/gp/product/" + bookID
-  try:
-    data = str(urllib2.urlopen(url).read())
-  except:
-    return None
+              more = False
+      
+      if page==1:
+          if soup('span', "pagnDisabled"):
+              pages = int(soup('span', "pagnDisabled")[0].string)
+          elif soup('span', "pagnLink"):
+              pages = int(soup('span', "pagnLink")[-1].string)
+          else:
+              pages = 1
+          return message, pages, more
+      else:
+          return message, more
+      
+  def checkBook(self, bookID, min_price):
+    """Check price of specific book"""
 
-  soup = BeautifulSoup(data, "html5lib")
-  name = soup.title.string[12:-14]
-  price = soup("div", "buying", id="priceBlock")[0](True,'priceLarge')[0].string.strip()
-  dprice = float(price[1:])
-  message = ""
-  if dprice < min_price:
-    message = name + " " + price + " - " + url + "\n"
-  return message
+    url = "http://www.amazon.com/gp/product/" + bookID
+    try:
+      data = str(self.opener.open(url).read())
+    except:
+      return None
+
+    soup = BeautifulSoup(data, "html.parser")
+    #soup = BeautifulSoup(data)
+
+    #print soup("span", id="btAsinTitle")
+    name = soup.title.string[12:-14]
+    price = soup("div", "buying", id="priceBlock")[0](True,'priceLarge')[0].string.strip()
+    dprice = float(price[1:])
+    message = ""
+    if dprice < min_price:
+      message = name + " " + price + " - " + url + "\n"
+    return message
+  
+  def amazonLogin(self):
+    """Log in to you amazon account"""
+    ################################### Setup #####################################
+    cj = cookielib.CookieJar()
+    self.opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
+    self.opener.addheaders = [('User-Agent', 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:26.0) Gecko/20100101 Firefox/26.0'),]
+  
+    ########################## Get and set form params ############################
+    url_login_page = "https://www.amazon.com/ap/signin/182-9380882-4173709?_encoding=UTF8&_encoding=UTF8&openid.assoc_handle=usflex&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.mode=checkid_setup&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0&openid.ns.pape=http%3A%2F%2Fspecs.openid.net%2Fextensions%2Fpape%2F1.0&openid.pape.max_auth_age=0&openid.return_to=https%3A%2F%2Fwww.amazon.com%2Fgp%2Fyourstore%2Fhome%3Fie%3DUTF8%26ref_%3Dgno_signin"
+    try:
+        response = self.opener.open(url_login_page)
+    except urllib2.HTTPError, e:
+        print e.code
+        print e.read()
+        exit(1)
+  
+    rspTxt = response.read()
+    pattern = '<input(.*?)name="(.+?)"(.*?)value="(.+?)"(.*?)/>'
+    matches = re.findall(pattern, rspTxt)
+    params = dict();
+  
+    for value in matches:
+      if value[1]!='email' and value[1]!='create':
+        params[value[1]] = value[3]
+    params['email'] = email
+    params['password'] = password
+  
+    params = urllib.urlencode(params)
+  
+    ############################# Post login details ##############################
+    url_login_post = "https://www.amazon.com/ap/signin"
+  
+    try:
+        response = self.opener.open(url_login_post,params)
+    except urllib2.HTTPError, e:
+        print e.code
+        print e.read()
+        exit(1)
 
 if __name__ == "__main__":
-  main(minprice, authors, ignore, own, overwrite, books)
+  EbookSpecials(minprice, authors, ignore, own, overwrite, books)
