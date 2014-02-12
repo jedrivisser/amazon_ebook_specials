@@ -24,7 +24,7 @@ class EbookSpecials:
  
     ### Go through whole list of authors and call getPage() for each result page for each author ###
     message = unicode('')
-    for authorID in self.authors.values():
+    for authorID in self.authors:
         result = self.checkPage(authorID) #run once to get first page and a page count
         if result:
           m, pages, more = result
@@ -38,14 +38,14 @@ class EbookSpecials:
           return   
         
     for bookID in self.books.keys():
-      minBookPrice = self.minprice if float(self.books[bookID]) < 0 else float(self.books[bookID])
+      minBookPrice = self.maxprice if float(self.books[bookID]) < 0 else float(self.books[bookID])
       m = self.checkBook(bookID,minBookPrice)
       message += unicode(m)
   
     message = unicodedata.normalize('NFKD', message).encode('ascii','ignore')  
     if message == '':
-        message = "No books cheaper than $" + str(self.minprice)
-    message = "======e-books cheaper than $"  + str(self.minprice) + "======\n" + message
+        message = "No books cheaper than $" + str(self.maxprice)
+    message = "======e-books cheaper than $"  + str(self.maxprice) + "======\n" + message
     print message
   
   def checkPage(self, authorID, page=1):
@@ -76,7 +76,7 @@ class EbookSpecials:
           	link = "http://www.amazon.com" + link
           price = book('div','tp')[0]('table')[0]('tr')[1]('td')[2]('a')[0].string
           dprice = float(price[1:])
-          if dprice < self.minprice:
+          if dprice < self.maxprice:
             if bookID in self.ignore or bookID in self.own:
               continue
             elif bookID in self.overwrite:
@@ -85,7 +85,7 @@ class EbookSpecials:
             else:
               message += name + " " + price + " - " + link + "\n"
           else:
-              more = False #set more to false is prices on page go above 'minprice'
+              more = False #set more to false if prices on page go above 'maxprice'
       
       if page==1:
           if soup('span', "pagnDisabled"):
@@ -167,17 +167,17 @@ class EbookSpecials:
     """Loads config from file"""
     Config = ConfigParser.SafeConfigParser(allow_no_value=True)
     Config.optionxform = str
-    Config.read("ebook.ini")
+    Config.read("ebook_specials.ini")
     
     
-    self.minprice = float(Config.get("CONFIG", "minprice"))
+    self.maxprice = float(Config.get("CONFIG", "maxprice"))
     self.login = Config.getboolean("CONFIG", "login")
     if self.login:
       self.email = Config.get("CONFIG", "email")
       self.password = Config.get("CONFIG", "password")
 
     
-    self.authors = dict(Config.items("AUTHORS"))
+    self.authors = Config.options("AUTHORS")
     self.ignore = Config.options("IGNORE")
     self.own = Config.options("OWN")
     self.overwrite = dict(Config.items("OVERWRITE"))
