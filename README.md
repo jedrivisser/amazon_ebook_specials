@@ -7,8 +7,8 @@ adding its name and value to the [OVERWRITE] section
 
 All this information is stored in ebook_specials.ini
 
------------------------CAUTION---------------------------
+CAUTION
+
 If you use the log-in functionality and store your log-in
 details in the config file (ebook_specials.ini), make sure
-if is in a secure place.
-----------------------------------------------------------
+it is in a secure place.
