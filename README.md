@@ -1,7 +1,9 @@
 Amazon e-book Specials checker
 
-This program checks for books by <authors> (using their amazon ID) which cost less than <maxprice> and filters out all books in <ignore> 
-You can also overwrite the <maxprice> for a specific book by adding its name and value to the <overwrite> section
+This program checks for books by authors (using their amazon ID)
+which cost less than 'maxprice' and filters out all books in [IGNORE]
+You can also overwrite the 'maxprice; for a specific book by
+adding its name and value to the [OVERWRITE] section
 
 All this information is stored in ebook_specials.ini
 
