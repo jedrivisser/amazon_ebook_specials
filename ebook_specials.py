@@ -6,6 +6,7 @@ import unicodedata
 import cookielib
 import re
 import ConfigParser
+import os
 from bs4 import BeautifulSoup
 
 
@@ -13,8 +14,10 @@ class EbookSpecials:
 
     """Amazon e-book Specials checker
 
-    This program checks for books by <authors> (using their amazon ID) which cost less than <price> and filters out all books in <ignore>
-    You can also overwrite <price> for a specific book by adding its name and value to the <overwrite> dictionary
+    This program checks for books by <authors> (using their amazon ID) which
+    cost less than <price> and filters out all books in <ignore>.
+    You can overwrite <price> for a specific book by adding its name and value
+    to the <overwrite> dictionary
 
     """
 
@@ -22,47 +25,47 @@ class EbookSpecials:
         # Set up opener and cookies ############
         cj = cookielib.CookieJar()
         self.opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
-        self.opener.addheaders = [
-            ('User-Agent', 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:26.0) Gecko/20100101 Firefox/26.0'), ]
+        self.opener.addheaders = [('User-Agent',
+                                   'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:26.0) Gecko/20100101 Firefox/26.0'), ]
 
-        self.loadConfig()
+        self.load_config()
 
         if self.login:
-            self.doLogin()
+            self.log_in()
 
         # Go through whole list of authors and call getPage() for each result
         # page for each author ###
         message = unicode('')
         for authorID in self.authors:
-            #run once to get first page and a page count
-            result = self.checkPage(authorID)
+            # Run once to get first page and a page count
+            result = self.check_page(authorID)
             if result:
                 m, pages, more = result
                 message += unicode(m)
-                #run for the other pages if there is more than one
+                # Run for the other pages if there is more than one
                 for page in range(2, pages + 1):
                     if more == True:
-                        m, more = self.checkPage(authorID, page)
+                        m, more = self.check_page(authorID, page)
                         message += unicode(m)
             else:
                 print "Could not connect"
                 return
 
         for bookID in self.books.keys():
-            minBookPrice = self.maxprice if float(
+            max_book_price = self.max_price if float(
                 self.books[bookID]) < 0 else float(self.books[bookID])
-            m = self.checkBook(bookID, minBookPrice)
+            m = self.check_book(bookID, max_book_price)
             message += unicode(m)
 
         message = unicodedata.normalize(
             'NFKD', message).encode('ascii', 'ignore')
         if message == '':
-            message = "No books cheaper than $" + str(self.maxprice)
+            message = "No books cheaper than $" + str(self.max_price)
         message = "======e-books cheaper than $"  + \
-            str(self.maxprice) + "======\n" + message
+            str(self.max_price) + "======\n" + message
         print message
 
-    def checkPage(self, authorID, page=1):
+    def check_page(self, authorID, page=1):
         """
         Checks one page for specials and returns the found specials,
         the number of pages, and if you should look for more specials.
@@ -77,7 +80,6 @@ class EbookSpecials:
             data = str(self.opener.open(url).read())
         except:
             return None
-
         #soup = BeautifulSoup(data, "html5lib")
         soup = BeautifulSoup(data, "html.parser")
 
@@ -88,13 +90,11 @@ class EbookSpecials:
         for book in books:
             bookID = book['name']
             name = book('h3')[0]('a')[0].string
-            link = book('h3')[0]('a')[0]['href']
-            if not link.startswith("http://www.amazon.com"):
-                link = "http://www.amazon.com" + link
+            link = "http://www.amazon.com/dp/" + bookID
             price = book('div', 'tp')[0]('table')[
                 0]('tr')[1]('td')[2]('a')[0].string
             dprice = float(price[1:])
-            if dprice < self.maxprice:
+            if dprice < self.max_price:
                 if bookID in self.ignore or bookID in self.own:
                     continue
                 elif bookID in self.overwrite:
@@ -103,7 +103,7 @@ class EbookSpecials:
                 else:
                     message += name + " " + price + " - " + link + "\n"
             else:
-                #set more to false if prices on page go above 'maxprice'
+                # set more to false if prices on page go above 'max_price'
                 more = False
 
         if page == 1:
@@ -117,10 +117,10 @@ class EbookSpecials:
         else:
             return message, more
 
-    def checkBook(self, bookID, min_price):
+    def check_book(self, bookID, max_price):
         """Check price of specific book from the [BOOKS] section"""
 
-        url = "http://www.amazon.com/gp/product/" + bookID
+        url = "http://www.amazon.com/dp/" + bookID
         try:
             data = str(self.opener.open(url).read())
         except:
@@ -135,11 +135,11 @@ class EbookSpecials:
             0](True, 'priceLarge')[0].string.strip()
         dprice = float(price[1:])
         message = ""
-        if dprice < min_price:
+        if dprice < max_price:
             message = name + " " + price + " - " + url + "\n"
         return message
 
-    def doLogin(self):
+    def log_in(self):
         """Log-in to you amazon account"""
 
         # Get and set form params ############################
@@ -183,13 +183,15 @@ class EbookSpecials:
             print "quitting."
             exit(1)
 
-    def loadConfig(self):
+    def load_config(self):
         """Loads config from file"""
+        config_file = os.path.splitext(os.path.basename(__file__))[0] + ".ini"
+
         Config = ConfigParser.SafeConfigParser(allow_no_value=True)
         Config.optionxform = str
-        Config.read("ebook_specials.ini")
+        Config.read(config_file)
 
-        self.maxprice = float(Config.get("CONFIG", "maxprice"))
+        self.max_price = Config.getfloat("CONFIG", "max_price")
         self.login = Config.getboolean("CONFIG", "login")
         if self.login:
             self.email = Config.get("CONFIG", "email")
