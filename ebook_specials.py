@@ -30,10 +30,11 @@ class EbookSpecials:
         cj = cookielib.CookieJar()
         self.opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
         self.opener.addheaders = [('User-Agent',
-                                   'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:26.0) Gecko/20100101 Firefox/26.0'), ]
+            'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:26.0)' + \
+            ' Gecko/20100101 Firefox/26.0'), ]
         if self.use_proxy:
             self.opener.add_handler(
-                urllib2.ProxyHandler({"http": self.proxy}))
+                urllib2.ProxyHandler({"https": self.proxy, "http": self.proxy}))
 
         if self.login:
             self.log_in()
