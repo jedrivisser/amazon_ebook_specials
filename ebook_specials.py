@@ -12,7 +12,8 @@ from bs4 import BeautifulSoup
 
 class EbookSpecials:
 
-    """Amazon e-book Specials checker
+    """
+    Amazon e-book Specials checker
 
     This program checks for books by <authors> (using their amazon ID) which
     cost less than <price> and filters out all books in <ignore>.
@@ -22,27 +23,31 @@ class EbookSpecials:
     """
 
     def __init__(self):
-        # Set up opener and cookies ############
+
+        self.load_config()
+
+        # Set up proxy, opener and cookies ####################################
         cj = cookielib.CookieJar()
         self.opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
         self.opener.addheaders = [('User-Agent',
                                    'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:26.0) Gecko/20100101 Firefox/26.0'), ]
-
-        self.load_config()
+        if self.use_proxy:
+            self.opener.add_handler(
+                urllib2.ProxyHandler({"http": self.proxy}))
 
         if self.login:
             self.log_in()
 
         # Go through whole list of authors and call getPage() for each result
-        # page for each author ###
+        # page for each author ################################################
         message = unicode('')
         for authorID in self.authors:
-            # Run once to get first page and a page count
+            # Run once to get first page and a page count #####################
             result = self.check_page(authorID)
             if result:
                 m, pages, more = result
                 message += unicode(m)
-                # Run for the other pages if there is more than one
+                # Run for the other pages if more than one needs to be loaded
                 for page in range(2, pages + 1):
                     if more == True:
                         m, more = self.check_page(authorID, page)
@@ -80,7 +85,6 @@ class EbookSpecials:
             data = str(self.opener.open(url).read())
         except:
             return None
-        #soup = BeautifulSoup(data, "html5lib")
         soup = BeautifulSoup(data, "html.parser")
 
         books = soup("div", "list results twister")[
@@ -103,7 +107,7 @@ class EbookSpecials:
                 else:
                     message += name + " " + price + " - " + link + "\n"
             else:
-                # set more to false if prices on page go above 'max_price'
+                # sets more to false if prices on page go above 'max_price'
                 more = False
 
         if page == 1:
@@ -126,10 +130,8 @@ class EbookSpecials:
         except:
             return None
 
-        #soup = BeautifulSoup(data, "html5lib")
         soup = BeautifulSoup(data, "html.parser")
 
-        # print soup("span", id="btAsinTitle")
         name = soup.title.string[12:-14]
         price = soup("div", "buying", id="priceBlock")[
             0](True, 'priceLarge')[0].string.strip()
@@ -142,7 +144,7 @@ class EbookSpecials:
     def log_in(self):
         """Log-in to you amazon account"""
 
-        # Get and set form params ############################
+        # Get and set form params #############################################
         url_login_page = "https://www.amazon.com/ap/signin/182-9380882-4173709?_encoding=UTF8&_encoding=UTF8&openid.assoc_handle=usflex&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.mode=checkid_setup&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0&openid.ns.pape=http%3A%2F%2Fspecs.openid.net%2Fextensions%2Fpape%2F1.0&openid.pape.max_auth_age=0&openid.return_to=https%3A%2F%2Fwww.amazon.com%2Fgp%2Fyourstore%2Fhome%3Fie%3DUTF8%26ref_%3Dgno_signin"
         try:
             response = self.opener.open(url_login_page)
@@ -164,7 +166,7 @@ class EbookSpecials:
 
         params = urllib.urlencode(params)
 
-        # Post login details ##############################
+        # Post login details ##################################################
         url_login_post = "https://www.amazon.com/ap/signin"
 
         try:
@@ -196,6 +198,10 @@ class EbookSpecials:
         if self.login:
             self.email = Config.get("CONFIG", "email")
             self.password = Config.get("CONFIG", "password")
+
+        self.use_proxy = Config.getboolean("CONFIG", "use_proxy")
+        if self.use_proxy:
+            self.proxy = Config.get("CONFIG", "proxy")
 
         self.authors = Config.options("AUTHORS")
         self.ignore = Config.options("IGNORE")
