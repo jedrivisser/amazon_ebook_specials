@@ -188,7 +188,7 @@ class EbookSpecials:
 
     def load_config(self):
         """Loads config from file"""
-        config_file = os.path.splitext(os.path.basename(__file__))[0] + ".ini"
+        config_file = os.path.splitext(__file__)[0] + ".ini"
 
         Config = ConfigParser.SafeConfigParser(allow_no_value=True)
         Config.optionxform = str
