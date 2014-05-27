@@ -88,8 +88,7 @@ class EbookSpecials:
             return None
         soup = BeautifulSoup(data, "html.parser")
 
-        books = soup("div", "list results twister")[
-            0].select('div.result.product.celwidget')
+        books = soup("div", {"id" : re.compile('result_.*')})
         message = ""
         more = True
         for book in books:
