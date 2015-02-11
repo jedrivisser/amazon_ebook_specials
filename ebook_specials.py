@@ -7,11 +7,11 @@ import cookielib
 import re
 import ConfigParser
 import os
+
 from bs4 import BeautifulSoup
 
 
 class EbookSpecials:
-
     """
     Amazon e-book Specials checker
 
@@ -23,6 +23,18 @@ class EbookSpecials:
     """
 
     def __init__(self):
+        # Instance attributes set by config
+        self.max_price = None
+        self.login = None
+        self.email = None
+        self.password = None
+        self.use_proxy = None
+        self.proxy = None
+        self.authors = None
+        self.ignore = None
+        self.own = None
+        self.overwrite = None
+        self.books = None
 
         self.load_config()
 
@@ -30,8 +42,7 @@ class EbookSpecials:
         cj = cookielib.CookieJar()
         self.opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
         self.opener.addheaders = [('User-Agent',
-            'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:26.0)' + \
-            ' Gecko/20100101 Firefox/26.0'), ]
+                                   'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:26.0) Gecko/20100101 Firefox/26.0'), ]
         if self.use_proxy:
             self.opener.add_handler(
                 urllib2.ProxyHandler({"https": self.proxy, "http": self.proxy}))
@@ -50,7 +61,7 @@ class EbookSpecials:
                 message += unicode(m)
                 # Run for the other pages if more than one needs to be loaded
                 for page in range(2, pages + 1):
-                    if more == True:
+                    if more:
                         m, more = self.check_page(authorID, page)
                         message += unicode(m)
             else:
@@ -63,49 +74,50 @@ class EbookSpecials:
             m = self.check_book(bookID, max_book_price)
             message += unicode(m)
 
-        message = unicodedata.normalize(
-            'NFKD', message).encode('ascii', 'ignore')
+        message = unicodedata.normalize('NFKD', message).encode('ascii', 'ignore')
         if message == '':
             message = "No books cheaper than $" + str(self.max_price)
-        message = "======e-books cheaper than $"  + \
-            str(self.max_price) + "======\n" + message
-        print message
+        print "======e-books cheaper than $" + str(self.max_price) + "======\n" + message
 
-    def check_page(self, authorID, page=1):
+    def check_page(self, author_id, page=1):
         """
         Checks one page for specials and returns the found specials,
         the number of pages, and if you should look for more specials.
 
         """
 
-        url = "http://www.amazon.com/r/e/" + authorID + \
-            "/?rh=n%3A283155%2Cp_n_feature_browse-bin%3A618073011&sort=price&page=" + \
-            str(page)
+        url = "http://www.amazon.com/r/e/" + author_id + \
+              "/?rh=n%3A283155%2Cp_n_feature_browse-bin%3A618073011&sort=price&page=" + str(page)
 
         try:
             data = str(self.opener.open(url).read())
-        except:
+        except urllib2.HTTPError, e:
+            print e.code
+            print e.read()
             return None
+
         soup = BeautifulSoup(data, "html.parser")
 
-        books = soup("div", {"id" : re.compile('result_.*')})
+        books = soup("div", {"id": re.compile('result_.*')})
         message = ""
         more = True
         for book in books:
-            bookID = book['name']
+            book_id = book['name']
             name = book('h3')[0]('a')[0].string
-            link = "http://www.amazon.com/dp/" + bookID
-            price = book('div', 'tp')[0]('table')[
-                0]('tr')[1]('td')[2]('a')[0].string
-            dprice = float(price[1:])
-            if dprice < self.max_price:
-                if bookID in self.ignore or bookID in self.own:
+
+            link = "http://www.amazon.com/dp/" + book_id
+            prices = book('div', 'tp')[0]('table')[0]('tr')[1]('td')[2]('a')
+            # needed to ignore kindleUnlimited $0.00
+            price_string = prices[len(prices) - 1].string
+            price_float = float(price_string[1:])
+            if price_float < self.max_price:
+                if book_id in self.ignore or book_id in self.own:
                     continue
-                elif bookID in self.overwrite:
-                    if dprice < float(self.overwrite[bookID]):
-                        message += name + " " + price + " - " + link + "\n"
+                elif book_id in self.overwrite:
+                    if price_float < float(self.overwrite[book_id]):
+                        message += name + " " + price_string + " - " + link + "\n"
                 else:
-                    message += name + " " + price + " - " + link + "\n"
+                    message += name + " " + price_string + " - " + link + "\n"
             else:
                 # sets more to false if prices on page go above 'max_price'
                 more = False
@@ -121,13 +133,15 @@ class EbookSpecials:
         else:
             return message, more
 
-    def check_book(self, bookID, max_price):
+    def check_book(self, book_id, max_price):
         """Check price of specific book from the [BOOKS] section"""
 
-        url = "http://www.amazon.com/dp/" + bookID
+        url = "http://www.amazon.com/dp/" + book_id
         try:
             data = str(self.opener.open(url).read())
-        except:
+        except urllib2.HTTPError, e:
+            print e.code
+            print e.read()
             return None
 
         soup = BeautifulSoup(data, "html.parser")
@@ -145,17 +159,26 @@ class EbookSpecials:
         """Log-in to you amazon account"""
 
         # Get and set form params #############################################
-        url_login_page = "https://www.amazon.com/ap/signin/182-9380882-4173709?_encoding=UTF8&_encoding=UTF8&openid.assoc_handle=usflex&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.mode=checkid_setup&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0&openid.ns.pape=http%3A%2F%2Fspecs.openid.net%2Fextensions%2Fpape%2F1.0&openid.pape.max_auth_age=0&openid.return_to=https%3A%2F%2Fwww.amazon.com%2Fgp%2Fyourstore%2Fhome%3Fie%3DUTF8%26ref_%3Dgno_signin"
+        url_login_page = "https://www.amazon.com/ap/signin/182-9380882-4173709" + \
+                         "?openid.assoc_handle=usflex" + \
+                         "&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select" + \
+                         "&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select" + \
+                         "&openid.mode=checkid_setup" + \
+                         "&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0" + \
+                         "&openid.return_to" + \
+                         "=https%3A%2F%2Fwww.amazon.com%2Fgp%2Fyourstore%2Fhome%3Fie%3DUTF8%26ref_%3Dgno_signin"
+
         try:
             response = self.opener.open(url_login_page)
         except urllib2.HTTPError, e:
             print e.code
             print e.read()
             exit(1)
+            return None
 
-        rspTxt = response.read()
+        response_text = response.read()
         pattern = '<input(.*?)name="(.+?)"(.*?)value="(.+?)"(.*?)/>'
-        matches = re.findall(pattern, rspTxt)
+        matches = re.findall(pattern, response_text)
         params = dict()
 
         for value in matches:
@@ -179,7 +202,7 @@ class EbookSpecials:
         if response.geturl() == "https://www.amazon.com/gp/yourstore/home?ie=UTF8&ref_=gno_signin&":
             print "Log-in for " + self.email + " successful."
         else:
-            #response.geturl() == "https://www.amazon.com/ap/signin"
+            # response.geturl() == "https://www.amazon.com/ap/signin"
             print "Log-in for " + self.email + " unsuccessful."
             print "Double check your password in ebook.ini."
             print "quitting."
@@ -189,25 +212,25 @@ class EbookSpecials:
         """Loads config from file"""
         config_file = os.path.splitext(__file__)[0] + ".ini"
 
-        Config = ConfigParser.SafeConfigParser(allow_no_value=True)
-        Config.optionxform = str
-        Config.read(config_file)
+        config = ConfigParser.SafeConfigParser(allow_no_value=True)
+        config.optionxform = str
+        config.read(config_file)
 
-        self.max_price = Config.getfloat("CONFIG", "max_price")
-        self.login = Config.getboolean("CONFIG", "login")
+        self.max_price = config.getfloat("CONFIG", "max_price")
+        self.login = config.getboolean("CONFIG", "login")
         if self.login:
-            self.email = Config.get("CONFIG", "email")
-            self.password = Config.get("CONFIG", "password")
+            self.email = config.get("CONFIG", "email")
+            self.password = config.get("CONFIG", "password")
 
-        self.use_proxy = Config.getboolean("CONFIG", "use_proxy")
+        self.use_proxy = config.getboolean("CONFIG", "use_proxy")
         if self.use_proxy:
-            self.proxy = Config.get("CONFIG", "proxy")
+            self.proxy = config.get("CONFIG", "proxy")
 
-        self.authors = Config.options("AUTHORS")
-        self.ignore = Config.options("IGNORE")
-        self.own = Config.options("OWN")
-        self.overwrite = dict(Config.items("OVERWRITE"))
-        self.books = dict(Config.items("BOOKS"))
+        self.authors = config.options("AUTHORS")
+        self.ignore = config.options("IGNORE")
+        self.own = config.options("OWN")
+        self.overwrite = dict(config.items("OVERWRITE"))
+        self.books = dict(config.items("BOOKS"))
 
 if __name__ == "__main__":
     EbookSpecials()
