@@ -107,20 +107,23 @@ class EbookSpecials:
 
             link = "http://www.amazon.com/dp/" + book_id
             prices = book('div', 'tp')[0]('table')[0]('tr')[1]('td')[2]('a')
-            # needed to ignore kindleUnlimited $0.00
-            price_string = prices[len(prices) - 1].string
-            price_float = float(price_string[1:])
-            if price_float < self.max_price:
-                if book_id in self.ignore or book_id in self.own:
-                    continue
-                elif book_id in self.overwrite:
-                    if price_float < float(self.overwrite[book_id]):
+
+            # if book has no price available
+            if not len(prices) == 0:
+                # needed to ignore kindleUnlimited $0.00
+                price_string = prices[len(prices) - 1].string
+                price_float = float(price_string[1:])
+                if price_float < self.max_price:
+                    if book_id in self.ignore or book_id in self.own:
+                        continue
+                    elif book_id in self.overwrite:
+                        if price_float < float(self.overwrite[book_id]):
+                            message += name + " " + price_string + " - " + link + "\n"
+                    else:
                         message += name + " " + price_string + " - " + link + "\n"
                 else:
-                    message += name + " " + price_string + " - " + link + "\n"
-            else:
-                # sets more to false if prices on page go above 'max_price'
-                more = False
+                    # sets more to false if prices on page go above 'max_price'
+                    more = False
 
         if page == 1:
             if soup('span', "pagnDisabled"):
