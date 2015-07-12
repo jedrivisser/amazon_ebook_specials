@@ -150,11 +150,10 @@ class EbookSpecials:
         soup = BeautifulSoup(data, "html.parser")
 
         name = soup.title.string[12:-14]
-        price = soup("div", "buying", id="priceBlock")[
-            0](True, 'priceLarge')[0].string.strip()
-        dprice = float(price[1:])
+        price = soup("tr", "kindle-price")[0]("td")[1].find(text=True).strip()
+        d_price = float(price[1:])
         message = ""
-        if dprice < max_price:
+        if d_price < max_price:
             message = name + " " + price + " - " + url + "\n"
         return message
 
